@@ -1,6 +1,6 @@
 # SQFT Microservice
 
-This repository introduces the microservice for an innovative method **SQFT**:
+This repository introduces the microservice for the innovative fine-tuning method **SQFT**:
 - **Paper**: [SQFT: Low-cost Model Adaptation in Low-precision Sparse Foundation Models](https://arxiv.org/abs/2410.03750)
 - **Official implementation**: [https://github.com/IntelLabs/Hardware-Aware-Automated-Machine-Learning/tree/main/SQFT](https://github.com/IntelLabs/Hardware-Aware-Automated-Machine-Learning/tree/main/SQFT)
 
@@ -8,8 +8,8 @@ SQFT is an end-to-end solution for low-precision sparse parameter-efficient fine
 Specifically, the highlights of SQFT include:
 
 - **SparsePEFT**, an efficient and effective strategy for fine-tuning sparse models. It ensures the preservation of the base model's sparsity during merging through the use of sparse adapters.
-- Introduction of quantization scenarios (sparse and quantization). **QA-SparsePEFT** built on SparsePEFT, which allows PEFT fine-tuning to achieve a single INT4 and sparse model adapted to the specific domain (pending support).
-- Adopt **Neural Low-rank Adapter Search (NLS)** strategy into all pipelines and solutions. 
+- Introduction of quantization scenarios (sparse and quantization). **QA-SparsePEFT** built on SparsePEFT allows PEFT fine-tuning to achieve a single INT4 and sparse model adapted to the specific domain (pending support).
+- Adopt the **Neural Low-rank Adapter Search (NLS)** strategy for all pipelines and solutions. 
 
 Please refer to the [paper](https://arxiv.org/abs/2410.03750) and official [code](https://github.com/IntelLabs/Hardware-Aware-Automated-Machine-Learning/tree/main/SQFT) for more details.
 
@@ -75,7 +75,7 @@ python sqft_service.py
 
 #### 2.1.1 Build Docker Image
 
-Build docker image with below command:
+Build a docker image with the below command:
 
 ```bash
 export HF_TOKEN=${your_huggingface_token}
@@ -85,7 +85,7 @@ docker build -t opea/sqft:latest --build-arg https_proxy=$https_proxy --build-ar
 
 #### 2.1.2 Run Docker with CLI
 
-Start docker container with below command:
+Start a docker container with the below command:
 
 ```bash
 docker run -d --name="sqft-server" -p 8015:8015 --runtime=runc --ipc=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy opea/sqft:latest
@@ -93,7 +93,7 @@ docker run -d --name="sqft-server" -p 8015:8015 --runtime=runc --ipc=host -e htt
 
 ## 🚀 3. Consume the SQFT Service
 
-We use [Arc-E](https://huggingface.co/datasets/allenai/ai2_arc/viewer/ARC-Easy) dataset as a simple example to demonstrate how to use SQFT on OPEA Microservice.
+We use the [Arc-E](https://huggingface.co/datasets/allenai/ai2_arc/viewer/ARC-Easy) dataset as a simple example to demonstrate how to use SQFT on OPEA Microservice.
 
 ### 3.1 Prepare and upload a training file
 
@@ -106,7 +106,7 @@ First, we need to process the training dataset into the instruction format, for 
     "output": "a bacterial population in the bloodstream"
 }
 ```
-Here, we use the Arc-E dataset as an example. The processing of the Arc-E training set is performed via the script [example_dataset/preprocess_arc.py](./example_dataset/preprocess_arc.py). 
+Here, we use the Arc-E dataset as an example. The Arc-E training set is processed using the script [example_dataset/preprocess_arc.py](./example_dataset/preprocess_arc.py). 
 After obtaining the processed dataset file [arce_train_instruct.json](./example_dataset/arce_train_instruct.json), we can upload it to the server with this command:
 ```bash
 # upload a training file
@@ -115,11 +115,11 @@ curl http://<your ip>:8015/v1/files -X POST -H "Content-Type: multipart/form-dat
 
 ### 3.2 Create a fine-tuning job
 
-After uploading a training file, use the following commands to launch some fine-tuning jobs.
+After uploading a training file, use the following commands to launch fine-tuning jobs.
 
 #### 3.2.1 Neural LoRA Search (NLS)
 
-Here is an example of using the [meta-llama/Llama-3.2-1B](https://huggingface.co/meta-llama/Llama-3.2-1B) model with NLS fine-tuning. The LoRA target modules are `q_proj`, `k_proj` and `v_proj`, which are elastic, and the low-rank search space is `[16, 12, 8]`. The result of this training is to obtain a trained super-adapter.
+Here is an example of using the [meta-llama/Llama-3.2-1B](https://huggingface.co/meta-llama/Llama-3.2-1B) model with NLS fine-tuning. We use _elastic_ LoRA target modules for `q_proj`, `k_proj`, and `v_proj` with a low-rank search space of `[16, 12, 8]`. The result of this step is a trained super-adapter.
 
 ```bash
 # Max LoRA rank: 16
@@ -158,8 +158,8 @@ Below are some explanations for the parameters related to the NLS algorithm:
 
 #### 3.2.2 SparsePEFT
 
-SparsePEFT is designed for the foundation model that has been sparsified using any sparse algorithms.
-For sparse model selection, SQFT offers several sparse and quantized base models for users to choose from (the complete SQFT scheme). 
+SparsePEFT is designed for foundation models that have been sparsified using any sparsification algorithm.
+For a selection of sparse (and quantized) models, SQFT offers several ready-to-use models that you can use as examples to understand how to sparsify your models. 
 Please refer to [here](https://github.com/IntelLabs/Hardware-Aware-Automated-Machine-Learning/tree/main/SQFT#released-foundation-models-) or the [HuggingFace SQFT Model Collection](https://huggingface.co/collections/IntelLabs/sqft-66cd56f90b240963f9cf1a67).
 Here is an example of enabling SparsePEFT by setting `sparse_adapter` to True, allowing the adapter to be integrated into the base model without losing sparsity.
 
@@ -196,8 +196,8 @@ Note that NLS strategy can also be applied to SparsePEFT.
 
 #### 3.3.1 Extract a Sub-Adapter
 
-After completing the fine-tuning stage and obtaining an NLS super-adapter, the next step is extract a desired sub-adapter. The following command demonstrates how to extract the heuristic sub-adapter.
-**Additionally, more powerful sub-adapters can be obtained through the advanced search algorithms.** (More details can be found in [here](#333-search-the-optimal-sub-adapter-configuration))
+After completing the fine-tuning stage and obtaining an NLS super-adapter, the next step is to extract a desired sub-adapter. The following command demonstrates how to extract the heuristic sub-adapter.
+**Additionally, more powerful sub-adapters can be obtained through advanced search algorithms.** (More details can be found [here](#333-search-the-optimal-sub-adapter-configuration))
 
 ```bash
 curl http://<your ip>:8015/v1/sqft/extract_sub_adapter \
@@ -254,11 +254,11 @@ The merged model will be saved in `<path to the output directory for this job> /
 
 #### 3.3.3 Search the Optimal Sub-Adapter Configuration
 
-To further explore for high-performing sub-adapter configurations within the super-adapter, we can utilize more advanced search algorithms to search the super-adapter.
+To further discover high-performing sub-adapter configurations within the super-adapter, we can utilize more advanced search algorithms on the super-adapter.
 Due to the flexibility and wide range of choices in the search settings, the service does not support the search process (but it supports providing a specific sub-adapter configuration to extract the sub-adapter; refer to [here](#331-extract-a-sub-adapter)).
 The search needs to be conducted service-externally according to user preferences.
 
-In our example, we provide a simple script ([search.py](./search.py)) for the search (hill-climbing algo) with Arc-E validation set to obtain some optimal sub-adapters.
+In our example, we provide a simple script ([search.py](./search.py)) for the search (hill-climbing algo) with the Arc-E validation set to obtain some optimal sub-adapters.
 The command is as follows:
 
 ```bash
