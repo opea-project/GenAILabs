@@ -1,0 +1,137 @@
+diff --git a/src/peft/tuners/lora/config.py b/src/peft/tuners/lora/config.py
+index cc5c60a..b36c64d 100644
+--- a/src/peft/tuners/lora/config.py
++++ b/src/peft/tuners/lora/config.py
+@@ -268,6 +268,18 @@ class LoraConfig(PeftConfig):
+             )
+         },
+     )
++    sparse_adapter: bool = field(
++        default=False,
++        metadata={
++            "help": (
++                "Enable 'SparsePEFT'. This strategy is designed for fine-tuning sparse models using adapters. "
++                "It sparsifies the adapter's parameter matrix (BA) such that the sparsity pattern of BA aligns "
++                "with that of the base model's weights (W). This alignment allows for the merging of the adapter "
++                "with the base model without disrupting its sparsity. It is derived from SQFT() and is used in the "
++                "pipelines SQFT + SparsePEFT and SQFT + QA-SparsePEFT."
++            )
++        }
++    )
+ 
+     def __post_init__(self):
+         self.peft_type = PeftType.LORA
+diff --git a/src/peft/tuners/lora/layer.py b/src/peft/tuners/lora/layer.py
+index 829b7bd..4d5db54 100644
+--- a/src/peft/tuners/lora/layer.py
++++ b/src/peft/tuners/lora/layer.py
+@@ -346,6 +346,7 @@ class Linear(nn.Module, LoraLayer):
+         init_lora_weights: Union[bool, str] = True,
+         use_rslora: bool = False,
+         use_dora: bool = False,
++        sparse_adapter: bool = False,  # Set this to True if enabling 'SparsePEFT' for fine-tuning sparse models
+         **kwargs,
+     ) -> None:
+         super().__init__()
+@@ -363,6 +364,7 @@ class Linear(nn.Module, LoraLayer):
+             use_dora=use_dora,
+         )
+         self.is_target_conv_1d_layer = is_target_conv_1d_layer
++        self.sparse_adapter = sparse_adapter
+ 
+     def merge(self, safe_merge: bool = False, adapter_names: Optional[list[str]] = None) -> None:
+         """
+@@ -471,6 +473,10 @@ class Linear(nn.Module, LoraLayer):
+             weight_B = weight_B.float()
+ 
+         output_tensor = transpose(weight_B @ weight_A, self.fan_in_fan_out) * self.scaling[adapter]
++        if self.sparse_adapter:
++            # Apply the sparse mask to BA (`output_tensor`).
++            mask = (self.base_layer.weight != 0)
++            output_tensor = output_tensor * mask
+ 
+         if cast_to_fp32:
+             output_tensor = output_tensor.to(dtype=dtype)
+@@ -506,7 +512,16 @@ class Linear(nn.Module, LoraLayer):
+                 x = x.to(lora_A.weight.dtype)
+ 
+                 if not self.use_dora[active_adapter]:
+-                    result = result + lora_B(lora_A(dropout(x))) * scaling
++                    if not self.sparse_adapter:
++                        result = result + lora_B(lora_A(dropout(x))) * scaling
++                    else:
++                        lora_A_weight = lora_A.weight
++                        lora_B_weight = lora_B.weight
++                        adapter_weight = torch.matmul(lora_B_weight, lora_A_weight) * scaling
++                        # Apply the sparse mask to BA (`adapter_weight`).
++                        mask = (self.base_layer.weight != 0).detach()
++                        adapter_weight = adapter_weight * mask
++                        result = result + nn.functional.linear(dropout(x), adapter_weight)
+                 else:
+                     x = dropout(x)
+                     result = result + self._apply_dora(x, lora_A, lora_B, scaling, active_adapter)
+diff --git a/src/peft/tuners/lora/model.py b/src/peft/tuners/lora/model.py
+index 3f381ef..11f046f 100644
+--- a/src/peft/tuners/lora/model.py
++++ b/src/peft/tuners/lora/model.py
+@@ -193,6 +193,7 @@ class LoraModel(BaseTuner):
+             "init_lora_weights": lora_config.init_lora_weights,
+             "use_rslora": lora_config.use_rslora,
+             "use_dora": lora_config.use_dora,
++            "sparse_adapter": lora_config.sparse_adapter,
+             "loaded_in_8bit": getattr(self.model, "is_loaded_in_8bit", False),
+             "loaded_in_4bit": getattr(self.model, "is_loaded_in_4bit", False),
+         }
+diff --git a/src/peft/utils/save_and_load.py b/src/peft/utils/save_and_load.py
+index 5ac1264..acb5d27 100644
+--- a/src/peft/utils/save_and_load.py
++++ b/src/peft/utils/save_and_load.py
+@@ -246,6 +246,48 @@ def set_peft_model_state_dict(model, peft_model_state_dict, adapter_name="defaul
+     else:
+         raise NotImplementedError
+ 
++    def module_reshape(state_dict):
++        """Reshape the linear module to match the state dict.
++
++        Args:
++            state_dict (dict): The state dict containing the parameters.
++        """
++        for param_name, param in state_dict.items():
++            tensor_name = param_name
++            splits = tensor_name.split(".")
++
++            # If the parameter name has multiple parts, navigate through the module hierarchy
++            if len(splits) > 1:
++                module = model
++                parent = None
++
++                # Traverse the module hierarchy to find the target module
++                for split in splits[:-1]:
++                    new_module = getattr(module, split, None)
++                    if new_module is None:
++                        raise ValueError(f"{module} has no attribute {split}.")
++                    parent = module
++                    module = new_module
++
++                tensor_name = splits[-1]
++                old_value = getattr(module, tensor_name)
++
++                # Check if the shape of the original module differs from the shape of the loaded parameter
++                if old_value.shape != param.shape and isinstance(module, torch.nn.Linear):
++                    # Create a new Linear module with the new shape
++                    new_module = torch.nn.Linear(
++                        param.shape[1],
++                        param.shape[0],
++                        bias=module.bias is not None,
++                        dtype=module.weight.dtype,
++                        device=module.weight.device
++                    )
++                    # Replace the old module with the new one in the parent module
++                    setattr(parent, splits[-2], new_module)
++
++    # Reshape the modules in the peft model to match the state dict
++    module_reshape(peft_model_state_dict)
++
+     load_result = model.load_state_dict(peft_model_state_dict, strict=False)
+     if config.is_prompt_learning:
+         model.prompt_encoder[adapter_name].embedding.load_state_dict(
