@@ -7,7 +7,7 @@ We provide a simple web retriever server and a client based on the Model-Context
 
 ```bash
 cd ../..
-docker build --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy -t opea/web-retrievers-mcp:latest -f comps/mcp_web_retrievers/Dockerfile.mcp .
+docker build --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy -t opea/web-retrievers-mcp:latest -f comps/mcp_web_retrievers/Dockerfile .
 ```
 
 ### Start the services
