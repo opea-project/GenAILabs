@@ -7,3 +7,4 @@ This repository is dedicated to exploring cutting-edge technologies in the gener
 | Features | Link | Misc |
 |----------|------|------|
 | SQFT: Low-cost Model Adaptation in Low-precision Sparse Foundation Models |  https://github.com/opea-project/GenAIResearch/tree/main/comps/sqft    |  https://aclanthology.org/2024.findings-emnlp.749    |
+| MCP Web Retriever | https://github.com/opea-project/GenAIResearch/tree/main/comps/mcp_web_retrievers | https://modelcontextprotocol.io/quickstart/server |
